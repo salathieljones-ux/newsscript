@@ -1,4 +1,14 @@
+// 4-hour cache per continent (best-effort in serverless)
+// Note: Vercel instances can recycle, so we ALSO set CDN cache headers below.
+type CachedValue = { ts: number; payload: any };
+const CACHE = new Map<string, CachedValue>();
+const TTL_MS = 4 * 60 * 60 * 1000; // 4 hours
 
+function setCachingHeaders(res: any) {
+  // Cache at the edge (Vercel CDN) for 4 hours.
+  // stale-while-revalidate helps smooth spikes and reduces Gemini calls.
+  res.setHeader("Cache-Control", "public, s-maxage=14400, stale-while-revalidate=3600");
+}
 
 export default async function handler(req: any, res: any) {
   // CORS: allow your GitHub Pages origin
@@ -10,8 +20,18 @@ export default async function handler(req: any, res: any) {
   if (req.method !== "GET") return res.status(405).json({ error: "Method not allowed" });
 
   const continent = String(req.query.continent || "Oceania");
-  const apiKey = process.env.GEMINI_API_KEY;
 
+  // --- Serve cache if fresh ---
+  const cacheKey = `continent:${continent.toLowerCase()}`;
+  const cached = CACHE.get(cacheKey);
+  if (cached && Date.now() - cached.ts < TTL_MS) {
+    setCachingHeaders(res);
+    // Helpful debugging flag (optional)
+    res.setHeader("X-NewsScript-Cache", "HIT");
+    return res.status(200).json(cached.payload);
+  }
+
+  const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return res.status(500).json({ error: "Missing GEMINI_API_KEY on server" });
 
   const model = "gemini-3-flash-preview";
@@ -46,6 +66,7 @@ Return ONLY valid JSON array of objects with:
     const data = await geminiResp.json();
 
     if (!geminiResp.ok) {
+      // Don’t cache errors.
       return res.status(geminiResp.status).json({ error: "Gemini error", details: data });
     }
 
@@ -57,8 +78,7 @@ Return ONLY valid JSON array of objects with:
 
     const rawStories = JSON.parse(match[0]);
 
-    // Return in the shape your frontend expects
-    return res.status(200).json({
+    const payload = {
       stories: rawStories.map((s: any, idx: number) => ({
         id: `${continent}-${idx}`,
         title: s.title,
@@ -73,7 +93,16 @@ Return ONLY valid JSON array of objects with:
         sourceUrl: undefined,
       })),
       sources: [],
-    });
+    };
+
+    // Save best-effort in-memory cache
+    CACHE.set(cacheKey, { ts: Date.now(), payload });
+
+    // Set CDN caching headers
+    setCachingHeaders(res);
+    res.setHeader("X-NewsScript-Cache", "MISS");
+
+    return res.status(200).json(payload);
   } catch (e: any) {
     return res.status(500).json({ error: "Server exception", message: String(e?.message || e) });
   }
