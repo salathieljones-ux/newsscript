@@ -30,8 +30,20 @@ export const NewsCard: React.FC<NewsCardProps> = ({ story }) => {
         </div>
         
         <h3 className="text-xl font-bold text-slate-900 mb-2 leading-tight">
-          {story.title}
-        </h3>
+  {story.sourceUrl ? (
+    <a 
+      href={story.sourceUrl} 
+      target="_blank" 
+      rel="noopener noreferrer"
+      className="hover:text-blue-700 transition-colors"
+    >
+      {story.title}
+    </a>
+  ) : (
+    story.title
+  )}
+</h3>
+
         
         <p className="text-slate-600 text-sm mb-4 leading-relaxed">
           {story.summary}
