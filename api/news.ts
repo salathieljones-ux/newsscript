@@ -45,7 +45,7 @@ For each story:
 4) Briefly explain why it applies.
 
 Return ONLY valid JSON array of objects with:
-"title","summary","ideology","scripture_ref","scripture_text","application".
+"title","summary","ideology","scripture_ref","scripture_text","application","source_url".
 `;
 
   try {
@@ -90,7 +90,7 @@ Return ONLY valid JSON array of objects with:
           text: s.scripture_text,
           application: s.application,
         },
-        sourceUrl: undefined,
+        sourceUrl: s.source_url || null,
       })),
       sources: [],
     };
