@@ -9,20 +9,27 @@ function setCachingHeaders(res: any) {
   // stale-while-revalidate helps smooth spikes and reduces Gemini calls.
   res.setHeader("Cache-Control", "public, s-maxage=14400, stale-while-revalidate=3600");
 }
-async function verifyUrl(url: string | null) {
+function verifyUrl(url: string | null) {
   if (!url) return null;
 
   try {
-    const resp = await fetch(url, { method: "HEAD" });
-    if (!resp.ok) return null;
+    const u = new URL(url);
 
-    if (url.includes("wikipedia.org")) return null;
+    // Must be https
+    if (u.protocol !== "https:") return null;
+
+    // Block Wikipedia
+    if (u.hostname.includes("wikipedia.org")) return null;
+
+    // Block Google redirect links
+    if (u.hostname.includes("google.")) return null;
 
     return url;
   } catch {
     return null;
   }
 }
+
 
 export default async function handler(req: any, res: any) {
   // CORS: allow your GitHub Pages origin
@@ -104,7 +111,7 @@ Return ONLY valid JSON array of objects with:
       text: s.scripture_text,
       application: s.application,
     },
-    sourceUrl: await verifyUrl(s.source_url || null),
+    sourceUrl: verifyUrl(s.source_url || null),
   }))
 );
 
