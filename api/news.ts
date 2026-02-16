@@ -9,6 +9,20 @@ function setCachingHeaders(res: any) {
   // stale-while-revalidate helps smooth spikes and reduces Gemini calls.
   res.setHeader("Cache-Control", "public, s-maxage=14400, stale-while-revalidate=3600");
 }
+async function verifyUrl(url: string | null) {
+  if (!url) return null;
+
+  try {
+    const resp = await fetch(url, { method: "HEAD" });
+    if (!resp.ok) return null;
+
+    if (url.includes("wikipedia.org")) return null;
+
+    return url;
+  } catch {
+    return null;
+  }
+}
 
 export default async function handler(req: any, res: any) {
   // CORS: allow your GitHub Pages origin
@@ -78,22 +92,26 @@ Return ONLY valid JSON array of objects with:
 
     const rawStories = JSON.parse(match[0]);
 
-    const payload = {
-      stories: rawStories.map((s: any, idx: number) => ({
-        id: `${continent}-${idx}`,
-        title: s.title,
-        summary: s.summary,
-        continent,
-        ideology: s.ideology,
-        scripture: {
-          reference: s.scripture_ref,
-          text: s.scripture_text,
-          application: s.application,
-        },
-        sourceUrl: s.source_url || null,
-      })),
-      sources: [],
-    };
+   const stories = await Promise.all(
+  rawStories.map(async (s: any, idx: number) => ({
+    id: `${continent}-${idx}`,
+    title: s.title,
+    summary: s.summary,
+    continent,
+    ideology: s.ideology,
+    scripture: {
+      reference: s.scripture_ref,
+      text: s.scripture_text,
+      application: s.application,
+    },
+    sourceUrl: await verifyUrl(s.source_url || null),
+  }))
+);
+
+const payload = {
+  stories,
+  sources: [],
+};
 
     // Save best-effort in-memory cache
     CACHE.set(cacheKey, { ts: Date.now(), payload });
